@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  nav { background: #1a1d2e; border-bottom: 1px solid #2d3148; padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 52px; }
+  nav h1 { font-size: 1rem; font-weight: 700; color: #f59e0b; letter-spacing: .5px; }
+  nav a { color: #94a3b8; text-decoration: none; font-size: .875rem; padding: .25rem 0; border-bottom: 2px solid transparent; cursor: pointer; }
+  nav a.active, nav a:hover { color: #e2e8f0; border-color: #f59e0b; }
+  .page { display: none; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+  .page.active { display: block; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 8px; padding: 1rem 1.25rem; }
+  .card .label { font-size: .75rem; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: .4rem; }
+  .card .value { font-size: 1.5rem; font-weight: 700; }
+  .card .sub { font-size: .75rem; color: #64748b; margin-top: .2rem; }
+  .gold { color: #f59e0b; } .green { color: #10b981; } .blue { color: #3b82f6; }
+  .red { color: #ef4444; } .orange { color: #ea580c; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  .chart-box { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 8px; padding: 1rem; }
+  .chart-box h3 { font-size: .875rem; color: #94a3b8; margin-bottom: .75rem; }
+  .chart-box canvas { max-height: 220px; }
+  .chart-full { grid-column: 1 / -1; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .section-header h2 { font-size: 1rem; font-weight: 600; }
+  button { background: #f59e0b; color: #0f1117; border: none; padding: .5rem 1rem; border-radius: 6px; cursor: pointer; font-size: .875rem; font-weight: 600; }
+  button:hover { background: #d97706; }
+  button.secondary { background: #2d3148; color: #e2e8f0; }
+  button.secondary:hover { background: #3d4168; }
+  button.danger { background: #7f1d1d; color: #fca5a5; }
+  button.danger:hover { background: #991b1b; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th { text-align: left; padding: .6rem .75rem; color: #64748b; font-size: .75rem; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #2d3148; }
+  td { padding: .6rem .75rem; border-bottom: 1px solid #1e2235; }
+  tr:hover td { background: #1a1d2e; }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 1.5rem; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 1rem; margin-bottom: 1.25rem; }
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-size: .8rem; color: #94a3b8; margin-bottom: .35rem; }
+  .field input, .field textarea { width: 100%; background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: .5rem .75rem; color: #e2e8f0; font-size: .875rem; }
+  .field input:focus, .field textarea:focus { outline: none; border-color: #f59e0b; }
+  .parsed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 1rem 0; }
+  .parsed-item { background: #0f1117; border-radius: 6px; padding: .6rem .75rem; font-size: .8rem; }
+  .parsed-item .k { color: #64748b; margin-bottom: .15rem; }
+  .parsed-item .v { font-weight: 600; }
+  .err { color: #ef4444; font-size: .875rem; margin-top: .5rem; }
+  .ok { color: #10b981; font-size: .875rem; margin-top: .5rem; }
+  .row-btns { display: flex; gap: .5rem; }
+  .ahead-badge { display: inline-block; padding: .2rem .6rem; border-radius: 4px; font-size: .75rem; font-weight: 700; }
+  .ahead { background: #064e3b; color: #10b981; }
+  .behind { background: #7f1d1d; color: #fca5a5; }
+  /* Story dashboard */
+  .verdict-box { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 12px; padding: 2rem 2rem 1.5rem; margin-bottom: 1.25rem; }
+  .verdict-box.is-ahead { border-color: #065f46; }
+  .verdict-box.is-behind { border-color: #7f1d1d; }
+  .verdict-question { font-size: .8rem; color: #64748b; text-transform: uppercase; letter-spacing: .8px; margin-bottom: .6rem; }
+  .verdict-answer { font-size: 1.75rem; font-weight: 800; margin-bottom: .35rem; line-height: 1.2; }
+  .verdict-summary { font-size: 1rem; color: #94a3b8; margin-bottom: 1.5rem; }
+  .verdict-summary strong { color: #e2e8f0; }
+  .progress-track { background: #0f1117; border-radius: 99px; height: 12px; overflow: hidden; margin-bottom: .5rem; }
+  .progress-fill { height: 100%; border-radius: 99px; background: #10b981; transition: width .6s ease; }
+  .progress-fill.behind { background: #ef4444; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: .75rem; color: #475569; }
+  .story-pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+  .pillar { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 1.25rem; }
+  .pillar-label { font-size: .75rem; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: .5rem; }
+  .pillar-value { font-size: 1.6rem; font-weight: 700; margin-bottom: .25rem; }
+  .pillar-sub { font-size: .8rem; color: #64748b; }
+  .pillar-breakdown { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid #1e2235; font-size: .8rem; color: #64748b; line-height: 1.7; }
+  .pillar-breakdown span { color: #94a3b8; }
+  .story-chart { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 10px; padding: 1.25rem; }
+  .story-chart h3 { font-size: .875rem; color: #94a3b8; margin-bottom: .75rem; }
+  .story-chart canvas { max-height: 240px; }
+  @media (max-width: 700px) { .story-pillars { grid-template-columns: 1fr; } .parsed-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <h1>⚡ Energy</h1>
+  <a class="active" onclick="showPage('dashboard',this)">Dashboard</a>
+  <a onclick="showPage('bills',this)">Bills</a>
+  <a onclick="showPage('rates',this)">Rate Plans</a>
+  <a onclick="showPage('solar',this)">Solar Setup</a>
+  <a onclick="showPage('phev',this)">EV Charging</a>
+</nav>
+
+<!-- Dashboard -->
+<div id="page-dashboard" class="page active">
+  <div id="verdict-box" class="verdict-box"></div>
+  <div id="cashflow-lead" style="display:none;margin-bottom:1.25rem;background:#1a1d2e;border:1px solid #2d3148;border-radius:10px;padding:1.25rem;font-size:.95rem;line-height:1.8;color:#94a3b8"></div>
+  <div id="story-pillars" class="story-pillars"></div>
+  <div id="roi-chart-box" class="story-chart" style="display:none">
+    <h3>Cumulative savings vs loan payments</h3>
+    <canvas id="chart-roi"></canvas>
+  </div>
+  <div id="bill-section" style="display:none;margin-top:1.25rem">
+    <div style="font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:.75rem">Monthly electricity costs</div>
+    <div id="bill-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem"></div>
+    <div class="story-chart">
+      <h3>Net electricity bill per month (solar credits already deducted)</h3>
+      <canvas id="chart-elec-bill" style="max-height:200px"></canvas>
+    </div>
+    <div id="post-loan-insight" style="margin-top:1rem;background:#1a1d2e;border:1px solid #2d3148;border-radius:10px;padding:1.25rem;font-size:.9rem;line-height:1.7;color:#94a3b8"></div>
+  </div>
+</div>
+
+<!-- Bills -->
+<div id="page-bills" class="page">
+  <div class="section-header">
+    <h2>Bills</h2>
+    <button onclick="openImport()">Import Bill from URL</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Statement Date</th><th>Period (Elec)</th><th>Import kWh</th><th>Export kWh</th>
+      <th>Gas GJ</th><th>Elec $</th><th>Gas $</th><th>Total $</th><th></th>
+    </tr></thead>
+    <tbody id="bills-tbody"></tbody>
+  </table>
+</div>
+
+<!-- Rate Plans -->
+<div id="page-rates" class="page">
+  <div class="section-header">
+    <h2>Rate Plans</h2>
+    <button onclick="openRatePlan()">Add Rate Plan</button>
+  </div>
+  <p style="color:#64748b;font-size:.875rem;margin-bottom:1.25rem">Track your electricity and gas rate plans over time — useful when comparing vendors or switching plans.</p>
+  <table>
+    <thead><tr>
+      <th>Utility</th><th>Plan</th><th>Effective From</th><th>Effective Until</th>
+      <th>Admin Fee</th><th>EMR</th><th>Energy Rate</th><th>Exit Fee</th><th></th>
+    </tr></thead>
+    <tbody id="rates-tbody"></tbody>
+  </table>
+</div>
+
+<!-- Rate plan modal -->
+<div class="modal-bg" id="rate-modal">
+  <div class="modal">
+    <h2>Add Rate Plan</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field"><label>Utility</label>
+        <input id="rp-utility" placeholder="e.g. Natural Gas / Electricity">
+      </div>
+      <div class="field"><label>Site ID</label>
+        <input id="rp-site-id" placeholder="optional">
+      </div>
+      <div class="field" style="grid-column:1/-1"><label>Plan Name</label>
+        <input id="rp-plan-name" placeholder="e.g. Variable Natural Gas [Market+EMR]/GJ">
+      </div>
+      <div class="field"><label>Effective From</label><input type="date" id="rp-from"></div>
+      <div class="field"><label>Effective Until</label><input type="date" id="rp-until"></div>
+      <div class="field"><label>Admin Fee ($/day)</label><input type="number" step="0.0001" id="rp-admin-fee" placeholder="e.g. 0.2627"></div>
+      <div class="field"><label>EMR Rate ($/GJ or $/kWh)</label><input type="number" step="0.0001" id="rp-emr" placeholder="e.g. 0.99"></div>
+      <div class="field"><label>Energy Rate Type</label>
+        <input id="rp-rate-type" placeholder="e.g. Variable market / Fixed">
+      </div>
+      <div class="field"><label>Fixed Rate (if applicable)</label><input type="number" step="0.0001" id="rp-rate-fixed" placeholder="leave blank if variable"></div>
+      <div class="field"><label>Early Exit Fee?</label>
+        <select id="rp-exit-fee" style="width:100%;background:#0f1117;border:1px solid #2d3148;border-radius:6px;padding:.5rem .75rem;color:#e2e8f0">
+          <option value="0">No</option><option value="1">Yes</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="rp-notes" rows="2"></textarea></div>
+    <div style="display:flex;gap:.75rem;margin-top:.25rem">
+      <button onclick="saveRatePlan()">Save</button>
+      <button class="secondary" onclick="closeRatePlan()">Cancel</button>
+    </div>
+    <div id="rp-msg"></div>
+  </div>
+</div>
+
+<!-- Solar Setup -->
+<div id="page-solar" class="page">
+  <div class="section-header">
+    <h2>Solar Installation</h2>
+    <button class="secondary" onclick="openSolarEdit()">Edit</button>
+  </div>
+  <div id="solar-display"></div>
+</div>
+
+<!-- Solar edit modal -->
+<div class="modal-bg" id="solar-modal">
+  <div class="modal">
+    <h2>Edit Solar Installation</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field" style="grid-column:1/-1"><label>Installation Date</label><input type="date" id="s-install-date"></div>
+      <div class="field"><label>Total Cost ($)</label><input type="number" step="0.01" id="s-total-cost"></div>
+      <div class="field"><label>Government Subsidy ($)</label><input type="number" step="0.01" id="s-subsidy"></div>
+      <div class="field"><label>Loan Amount ($)</label><input type="number" step="0.01" id="s-loan-amount"></div>
+      <div class="field"><label>Monthly Payment ($)</label><input type="number" step="0.01" id="s-monthly-payment"></div>
+      <div class="field"><label>Loan Term (months)</label><input type="number" id="s-loan-term" value="120"></div>
+      <div class="field"><label>Loan Start Date</label><input type="date" id="s-loan-start"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="s-notes" rows="2"></textarea></div>
+    <div style="display:flex;gap:.75rem;margin-top:.25rem">
+      <button onclick="saveSolar()">Save</button>
+      <button class="secondary" onclick="closeSolarEdit()">Cancel</button>
+    </div>
+    <span id="solar-msg"></span>
+  </div>
+</div>
+
+<!-- EV Charging -->
+<div id="page-phev" class="page">
+  <div style="margin-bottom:1.5rem">
+    <h2 style="font-size:1rem;font-weight:600;margin-bottom:.35rem">EV Charging Impact</h2>
+    <p style="font-size:.875rem;color:#64748b">2025 Mazda CX-70 PHEV — purchased October 2025. Charged at home (Level 1, overnight) and for free at Sheila's work.</p>
+  </div>
+
+  <div id="phev-verdict" style="margin-bottom:1.25rem"></div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem" id="phev-stats"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+    <div class="story-chart">
+      <h3>Monthly Esso pump spend — before &amp; after PHEV</h3>
+      <canvas id="chart-phev-elec" style="max-height:220px"></canvas>
+    </div>
+    <div class="story-chart">
+      <h3>Monthly ACE natural gas bill — before &amp; after PHEV</h3>
+      <canvas id="chart-phev-gas" style="max-height:220px"></canvas>
+    </div>
+  </div>
+
+  <div id="phev-note" style="background:#1a1d2e;border:1px solid #2d3148;border-radius:10px;padding:1.25rem;font-size:.875rem;line-height:1.8;color:#94a3b8"></div>
+</div>
+
+<!-- Import modal -->
+<div class="modal-bg" id="import-modal">
+  <div class="modal">
+    <h2>Import Bill from URL</h2>
+    <div class="field">
+      <label>Paste the bill URL from your ACE Energy email</label>
+      <input type="url" id="import-url" placeholder="https://…">
+    </div>
+    <div style="display:flex;gap:.75rem;margin-top:.25rem">
+      <button onclick="runImport()">Fetch &amp; Parse</button>
+      <button class="secondary" onclick="closeImport()">Cancel</button>
+    </div>
+    <div id="import-status"></div>
+    <div id="parsed-preview" style="display:none">
+      <hr style="border-color:#2d3148;margin:1rem 0">
+      <h3 style="font-size:.875rem;margin-bottom:.5rem">Parsed Data — confirm before saving</h3>
+      <div class="parsed-grid" id="parsed-fields"></div>
+      <div style="display:flex;gap:.75rem;margin-top:1rem">
+        <button onclick="confirmSave()">Save Bill</button>
+        <button class="secondary" onclick="closeImport()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let parsedBill = null;
+let roiChart;
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'bills') loadBills();
+  if (name === 'rates') loadRates();
+  if (name === 'solar') loadSolar();
+  if (name === 'phev') loadPhev();
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  // Render stats immediately, then load ECU generation data in the background
+  const data = await fetch('/api/stats').then(r => r.json());
+  const { totals, bills, solar, roi } = data;
+
+  renderDashboard(data, { days: [] });
+
+  // ECU data loads separately — update ROI chart when ready
+  fetch('/api/solar/generation?days=400')
+    .then(r => r.json())
+    .catch(() => ({ days: [] }))
+    .then(genData => renderDashboard(data, genData));
+}
+
+function renderDashboard(data, genData) {
+  const { totals, bills, solar, roi } = data;
+
+  // Build ECU daily generation lookup
+  const ecuByDate = {};
+  for (const d of (genData.days || [])) ecuByDate[d.date] = d.kwh;
+
+  // Self-consumption savings per billing period
+  let totalSelfSavings = 0;
+  const billsEnhanced = bills.map(b => {
+    const pStart = b.electricity_period_start, pEnd = b.electricity_period_end;
+    if (!pStart || !pEnd) return b;
+    let genKwh = 0, hasCoverage = false;
+    const cur = new Date(pStart), endDate = new Date(pEnd);
+    while (cur <= endDate) {
+      const ds = cur.toISOString().slice(0, 10);
+      if (ds in ecuByDate) { genKwh += ecuByDate[ds]; hasCoverage = true; }
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (!hasCoverage) return b;
+    const selfKwh = Math.max(0, genKwh - (b.grid_export_kwh || 0));
+    const selfVal = Math.round(selfKwh * (b.electricity_rate_kwh || 0.119) * 100) / 100;
+    totalSelfSavings += selfVal;
+    return { ...b, self_kwh: Math.round(selfKwh), self_val: selfVal, period_gen_kwh: Math.round(genKwh) };
+  });
+
+  if (!roi || !solar?.loan_start_date) return;
+
+  const grant = solar.government_subsidy || 0;
+  const hasSelfData = totalSelfSavings > 0;
+  const electricitySavings = roi.cum_savings + totalSelfSavings;
+  const totalBenefit = electricitySavings + grant;
+  const net = totalBenefit - roi.cum_loan_paid;
+  const isAhead = net >= 0;
+  const netInvestment = roi.net_investment || (solar.loan_amount - grant);
+  const progressPct = Math.min(100, Math.round(totalBenefit / netInvestment * 100));
+
+  // Break-even display
+  const beDate = roi.break_even_date ? new Date(roi.break_even_date) : null;
+  const installDate = solar.installation_date ? new Date(solar.installation_date) : null;
+  const beLabel = beDate ? beDate.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' }) : '—';
+  const beYearsFromInstall = (beDate && installDate)
+    ? Math.round((beDate - installDate) / (365.25 * 24 * 3600 * 1000) * 10) / 10
+    : null;
+  const beMonthsRemaining = beDate ? Math.round((beDate - new Date()) / (30.44 * 24 * 3600 * 1000)) : null;
+  const beAway = beMonthsRemaining != null
+    ? (beMonthsRemaining <= 0 ? 'already reached' : beMonthsRemaining < 12 ? `${beMonthsRemaining} months to go` : `${Math.round(beMonthsRemaining / 12 * 10) / 10} years to go`)
+    : '';
+
+  // ── Verdict box ──────────────────────────────────────────────────────────────
+  const verdictEl = document.getElementById('verdict-box');
+  verdictEl.className = `verdict-box ${isAhead ? 'is-ahead' : 'is-behind'}`;
+  verdictEl.innerHTML = `
+    <div class="verdict-question">Was solar a good decision?</div>
+    <div class="verdict-answer ${isAhead ? 'green' : 'red'}">${isAhead ? 'Yes — you\'re ahead.' : 'Not yet — but you\'re getting there.'}</div>
+    <div class="verdict-summary">Between electricity savings and the government grant, solar has returned
+      <strong>$${totalBenefit.toFixed(0)}</strong> on a net investment of <strong>$${netInvestment.toLocaleString()}</strong>.
+      You've paid <strong>$${roi.cum_loan_paid.toFixed(0)}</strong> toward the loan.
+      That puts you <strong>${isAhead ? '$' + net.toFixed(0) + ' ahead' : '$' + Math.abs(net).toFixed(0) + ' behind'}</strong>.
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill ${isAhead ? '' : 'behind'}" style="width:${progressPct}%"></div>
+    </div>
+    <div class="progress-labels">
+      <span>$0</span>
+      <span>${progressPct}% of $${netInvestment.toLocaleString()} recovered</span>
+      <span>$${netInvestment.toLocaleString()}</span>
+    </div>
+  `;
+
+  // ── Three pillars ────────────────────────────────────────────────────────────
+  document.getElementById('story-pillars').innerHTML = `
+    <div class="pillar">
+      <div class="pillar-label">Loan paid so far</div>
+      <div class="pillar-value red">$${roi.cum_loan_paid.toFixed(0)}</div>
+      <div class="pillar-sub">${roi.months_elapsed} monthly payments of $${(solar.loan_monthly_payment || 0).toFixed(0)}</div>
+      ${grant > 0 ? `<div class="pillar-breakdown">
+        <span>$${grant.toLocaleString()}</span> from government grant<br>
+        <span>$${Math.max(0, roi.cum_loan_paid - grant).toFixed(0)}</span> out of your pocket
+      </div>` : ''}
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Total benefit</div>
+      <div class="pillar-value green">$${totalBenefit.toFixed(0)}</div>
+      <div class="pillar-breakdown">
+        <span>$${roi.cum_savings.toFixed(0)}</span> sold back to the grid<br>
+        ${hasSelfData ? `<span>~$${totalSelfSavings.toFixed(0)}</span> used directly at home<br>` : ''}
+        <span>$${grant.toLocaleString()}</span> government grant
+      </div>
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Break-even</div>
+      <div class="pillar-value">${beLabel}</div>
+      <div class="pillar-sub">${beAway}</div>
+      <div class="pillar-breakdown">
+        ${beYearsFromInstall ? `${beYearsFromInstall} years from installation<br>` : ''}
+        After that, every dollar saved<br>is pure profit.
+      </div>
+    </div>
+  `;
+
+  // ── ROI chart ────────────────────────────────────────────────────────────────
+  document.getElementById('roi-chart-box').style.display = '';
+  drawROI(billsEnhanced, solar, roi, totalSelfSavings);
+
+  // ── Electricity bill section ─────────────────────────────────────────────────
+  drawBillSection(bills, solar);
+
+  // ── Cashflow vs no-solar (top of dashboard) ──────────────────────────────────
+  const cutoff12 = new Date(); cutoff12.setMonth(cutoff12.getMonth() - 12);
+  const last12e = billsEnhanced.filter(b => new Date(b.statement_date) >= cutoff12 && b.grid_import_kwh);
+  const leadEl = document.getElementById('cashflow-lead');
+  if (last12e.length && last12e.some(b => b.self_kwh != null)) {
+    const DEFAULT_RATE = 0.1201;
+    let sumNoSolar = 0, sumActual = 0;
+    for (const b of last12e) {
+      const energyNet = (b.grid_import_kwh || 0) * (b.electricity_rate_kwh || 0.119)
+                      - (b.grid_export_kwh || 0) * ((b.electricity_rate_kwh || 0.119) + (b.electricity_emr_rate || 0.0099));
+      const dist = (b.electricity_total || 0) - energyNet;
+      const noSolarKwh = (b.grid_import_kwh || 0) + (b.self_kwh || 0);
+      sumNoSolar += noSolarKwh * DEFAULT_RATE + dist;
+      sumActual  += b.electricity_total || 0;
+    }
+    const avgNoSolar = sumNoSolar / last12e.length;
+    const avgActual  = sumActual  / last12e.length;
+    const elecSaving = avgNoSolar - avgActual;
+    const loanPmt    = solar.loan_monthly_payment || 0;
+    const netCashflow = elecSaving - loanPmt;
+    const loanEnd = new Date(solar.loan_start_date);
+    loanEnd.setMonth(loanEnd.getMonth() + (solar.loan_term_months || 120));
+    const loanEndLabel = loanEnd.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' });
+    // Energy-only net (commodity before service/delivery fees)
+    let sumEnergyNet = 0;
+    for (const b of last12e) {
+      sumEnergyNet += (b.grid_import_kwh || 0) * ((b.electricity_rate_kwh || 0.119) + (b.electricity_emr_rate || 0.0099))
+                    - (b.grid_export_kwh || 0) * ((b.electricity_rate_kwh || 0.119) + (b.electricity_emr_rate || 0.0099));
+    }
+    const avgEnergyNet = sumEnergyNet / last12e.length;
+
+    const ahead = netCashflow >= 0;
+    leadEl.style.display = '';
+    leadEl.innerHTML = `
+      <div style="margin-bottom:.6rem">
+        <span style="color:#10b981;font-size:1.1rem;font-weight:700">✓ Solar fully pays for your electricity.</span>
+        On the commodity alone, your panels generate a net credit of
+        <strong style="color:#10b981">$${Math.round(Math.abs(avgEnergyNet))}/month</strong>.
+        The <strong style="color:#e2e8f0">~$${Math.round(avgActual)}/month</strong> you pay is entirely service and delivery fees.
+      </div>
+      <span style="color:${ahead ? '#10b981' : '#f59e0b'};font-weight:600">
+        ${ahead ? '✓' : '▲'} Including those fees and the loan, you're $${Math.round(Math.abs(netCashflow))}/month ${ahead ? 'ahead' : 'behind'} vs not having solar
+      </span>
+      at Alberta's 12¢ default rate. Once the loan ends in ${loanEndLabel}, that grows to
+      <strong style="color:#10b981">$${Math.round(elecSaving)}/month ahead</strong> — permanently.
+    `;
+  } else {
+    leadEl.style.display = 'none';
+  }
+}
+
+function fmt(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : Math.round(n); }
+
+let billChart;
+function drawBillSection(bills, solar) {
+  // Last 18 months of bills, grouped by month
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 18);
+  const recent = bills.filter(b => new Date(b.statement_date) >= cutoff)
+    .sort((a, b) => a.statement_date.localeCompare(b.statement_date));
+  if (!recent.length) return;
+
+  document.getElementById('bill-section').style.display = '';
+
+  const labels = recent.map(b => {
+    const [y, m] = b.statement_date.split('-');
+    return new Date(+y, +m - 1).toLocaleDateString('en-CA', { month: 'short', year: '2-digit' });
+  });
+  const elecVals = recent.map(b => +(b.electricity_total || 0).toFixed(2));
+  const gasVals  = recent.map(b => +(b.gas_total || 0).toFixed(2));
+
+  // Averages over last 12 months
+  const last12 = bills.filter(b => {
+    const c = new Date(); c.setMonth(c.getMonth() - 12);
+    return new Date(b.statement_date) >= c;
+  });
+  const avgElec = last12.length ? last12.reduce((s, b) => s + (b.electricity_total || 0), 0) / last12.length : 0;
+  const avgGas  = last12.length ? last12.reduce((s, b) => s + (b.gas_total || 0), 0) / last12.length : 0;
+  const loanPmt = solar.loan_monthly_payment || 0;
+
+  // Loan end date
+  const loanEnd = new Date(solar.loan_start_date);
+  loanEnd.setMonth(loanEnd.getMonth() + (solar.loan_term_months || 120));
+  const loanEndLabel = loanEnd.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' });
+
+  document.getElementById('bill-stats').innerHTML = `
+    <div class="pillar">
+      <div class="pillar-label">Avg electricity / month</div>
+      <div class="pillar-value" style="font-size:1.3rem">${avgElec < 0 ? '-' : ''}$${Math.abs(avgElec).toFixed(0)}</div>
+      <div class="pillar-sub">last 12 months, net of solar</div>
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Avg gas / month</div>
+      <div class="pillar-value" style="font-size:1.3rem">$${avgGas.toFixed(0)}</div>
+      <div class="pillar-sub">last 12 months</div>
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Loan payment</div>
+      <div class="pillar-value" style="font-size:1.3rem">$${loanPmt.toFixed(0)}</div>
+      <div class="pillar-sub">until ${loanEndLabel}</div>
+    </div>
+  `;
+
+  const currentTotal = avgElec + avgGas + loanPmt;
+  const postLoanTotal = avgElec + avgGas;
+  document.getElementById('post-loan-insight').innerHTML = `
+    <strong style="color:#e2e8f0">When the loan ends in ${loanEndLabel}:</strong><br>
+    Your monthly outgoing drops from <strong style="color:#e2e8f0">~$${currentTotal.toFixed(0)}</strong>
+    to <strong style="color:#10b981">~$${postLoanTotal.toFixed(0)}</strong>
+    — a saving of <strong style="color:#10b981">$${loanPmt.toFixed(0)}/month</strong>, every month, forever.<br><br>
+    <span style="color:#64748b">That $${loanPmt.toFixed(0)} disappears completely. Your electricity and gas costs stay the same —
+    solar keeps reducing the electricity portion just as it does today.</span>
+  `;
+
+  // Chart — colour negative bars green, positive bars blue
+  const colours = elecVals.map(v => v < 0 ? '#10b98199' : '#3b82f699');
+  if (billChart) billChart.destroy();
+  billChart = new Chart(document.getElementById('chart-elec-bill'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Electricity (net)', data: elecVals, backgroundColor: colours },
+        { label: 'Gas', data: gasVals, backgroundColor: '#ea580c55' },
+      ]
+    },
+    options: {
+      ...chartOpts('$'),
+      plugins: {
+        ...chartOpts('$').plugins,
+        annotation: undefined,
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}` } }
+      }
+    }
+  });
+}
+
+
+// ── EV Charging ───────────────────────────────────────────────────────────────
+let phevElecChart, phevGasChart, phevFuelChart;
+const PHEV_DATE = '2025-10-01';
+
+async function loadPhev() {
+  const [statsData, fuelRaw] = await Promise.all([
+    fetch('/api/stats').then(r => r.json()),
+    fetch('/api/fuel-purchases').then(r => r.json())
+  ]);
+  const bills = statsData.bills.sort((a, b) => a.statement_date.localeCompare(b.statement_date));
+
+  // ── Fuel pump analysis (Esso receipts) ──────────────────────────────────────
+  // Group by year-month
+  const fuelByMonth = {};
+  for (const p of fuelRaw) {
+    const ym = p.date.slice(0, 7);
+    if (!fuelByMonth[ym]) fuelByMonth[ym] = { amount: 0, litres: 0, count: 0 };
+    fuelByMonth[ym].amount += p.amount;
+    fuelByMonth[ym].litres += p.litres;
+    fuelByMonth[ym].count++;
+  }
+
+  // Before = Oct 2024 – Sep 2025 (12 months with same period); After = Oct 2025+
+  const fuelBefore = Object.entries(fuelByMonth).filter(([ym]) => ym >= '2024-10' && ym < '2025-10');
+  const fuelAfter  = Object.entries(fuelByMonth).filter(([ym]) => ym >= '2025-10');
+  const avgFuelBefore = fuelBefore.reduce((s, [, v]) => s + v.amount, 0) / (fuelBefore.length || 1);
+  const avgFuelAfter  = fuelAfter.reduce((s,  [, v]) => s + v.amount, 0) / (fuelAfter.length  || 1);
+  const avgLBefore = fuelBefore.reduce((s, [, v]) => s + v.litres, 0) / (fuelBefore.length || 1);
+  const avgLAfter  = fuelAfter.reduce((s,  [, v]) => s + v.litres, 0) / (fuelAfter.length  || 1);
+  const fuelDelta = avgFuelAfter - avgFuelBefore;
+
+  // ── ACE electricity bill analysis (YoY winter) ──────────────────────────────
+  const beforeWinter = bills.filter(b => { const m = +b.statement_date.slice(5,7); return b.statement_date >= '2024-10-01' && b.statement_date < PHEV_DATE && (m >= 10 || m <= 3); });
+  const afterWinter  = bills.filter(b => { const m = +b.statement_date.slice(5,7); return b.statement_date >= PHEV_DATE && (m >= 10 || m <= 3); });
+  const avg = (arr, key) => arr.length ? arr.reduce((s, b) => s + (b[key] || 0), 0) / arr.length : 0;
+  const elecDelta = avg(afterWinter, 'electricity_total') - avg(beforeWinter, 'electricity_total');
+  const extraKwh  = avg(afterWinter, 'grid_import_kwh')   - avg(beforeWinter, 'grid_import_kwh');
+
+  // Combined net: fuel savings + elec increase
+  const netDelta = elecDelta + fuelDelta; // fuelDelta is negative (savings)
+
+  // ── Verdict ─────────────────────────────────────────────────────────────────
+  document.getElementById('phev-verdict').innerHTML = `
+    <div class="verdict-box" style="border-color:#065f4688;padding:1.25rem 1.5rem">
+      <div class="verdict-question">Is the PHEV saving money?</div>
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:.4rem;color:#10b981">
+        ~$${Math.abs(fuelDelta).toFixed(0)}/month less at the pump</div>
+      <div style="font-size:.9rem;color:#94a3b8">
+        Avg Esso spend: <strong style="color:#e2e8f0">$${avgFuelBefore.toFixed(0)}/mo before</strong> →
+        <strong style="color:#10b981">$${avgFuelAfter.toFixed(0)}/mo after</strong> (Oct 2024–Sep 2025 vs Oct 2025+, ${fuelAfter.length} months after).
+        Home electricity up ~$${elecDelta.toFixed(0)}/mo. Net change: <strong style="color:${netDelta <= 0 ? '#10b981' : '#f59e0b'}">${netDelta > 0 ? '+' : ''}$${netDelta.toFixed(0)}/mo</strong>.
+      </div>
+    </div>`;
+
+  // ── Stats pillars ────────────────────────────────────────────────────────────
+  document.getElementById('phev-stats').innerHTML = `
+    <div class="pillar">
+      <div class="pillar-label">Esso pump spend</div>
+      <div class="pillar-value" style="color:#10b981">${fuelDelta > 0 ? '+' : ''}$${fuelDelta.toFixed(0)}/mo</div>
+      <div class="pillar-sub">year-over-year avg change</div>
+      <div class="pillar-breakdown">
+        ${avgLBefore.toFixed(0)}L/mo → <span>${avgLAfter.toFixed(0)}L/mo</span><br>
+        <span>~${(avgLBefore - avgLAfter).toFixed(0)}L/mo less gasoline</span>
+      </div>
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Home electricity</div>
+      <div class="pillar-value" style="color:${elecDelta > 0 ? '#f59e0b' : '#10b981'}">${elecDelta > 0 ? '+' : ''}$${elecDelta.toFixed(0)}/mo</div>
+      <div class="pillar-sub">ACE bill, winter YoY</div>
+      <div class="pillar-breakdown">
+        +${extraKwh.toFixed(0)} kWh/month<br><span>~${(extraKwh / 30).toFixed(1)} kWh/night charging</span>
+      </div>
+    </div>
+    <div class="pillar">
+      <div class="pillar-label">Net combined</div>
+      <div class="pillar-value" style="color:${netDelta <= 0 ? '#10b981' : '#f59e0b'}">${netDelta > 0 ? '+' : ''}$${netDelta.toFixed(0)}/mo</div>
+      <div class="pillar-sub">pump savings minus extra electricity</div>
+      <div class="pillar-breakdown">
+        Plus free workplace charging<br><span>not counted here</span>
+      </div>
+    </div>`;
+
+  // ── Fuel chart: monthly Esso spend ───────────────────────────────────────────
+  const allMonths = Object.keys(fuelByMonth).sort();
+  const phevMonthIdx = allMonths.findIndex(ym => ym >= '2025-10');
+  const fuelAnnotation = phevMonthIdx >= 0 ? {
+    type: 'line', xMin: phevMonthIdx - 0.5, xMax: phevMonthIdx - 0.5,
+    borderColor: '#f59e0b88', borderWidth: 2, borderDash: [4, 3],
+    label: { content: 'PHEV', display: true, position: 'start', color: '#f59e0b', font: { size: 11 }, backgroundColor: 'transparent' }
+  } : null;
+
+  if (phevFuelChart) phevFuelChart.destroy();
+  phevFuelChart = new Chart(document.getElementById('chart-phev-elec'), {
+    type: 'bar',
+    data: { labels: allMonths, datasets: [{
+      label: 'Esso spend',
+      data: allMonths.map(ym => +(fuelByMonth[ym]?.amount || 0).toFixed(2)),
+      backgroundColor: allMonths.map((ym, i) => i < phevMonthIdx ? '#f59e0b44' : '#f59e0b99')
+    }]},
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)} (${fuelByMonth[ctx.label]?.count || 0} fills)` } },
+        annotation: fuelAnnotation ? { annotations: { phevLine: fuelAnnotation } } : {}
+      },
+      scales: {
+        x: { ticks: { color: '#64748b', maxRotation: 45, font: { size: 10 } }, grid: { color: '#1e2235' } },
+        y: { ticks: { color: '#64748b', callback: v => `$${v}` }, grid: { color: '#1e2235' } }
+      }
+    }
+  });
+
+  // ── ACE gas bill chart ───────────────────────────────────────────────────────
+  const billLabels = bills.map(b => b.statement_date.slice(0, 7));
+  const gasVals    = bills.map(b => +(b.gas_total || 0).toFixed(2));
+  const phevBillIdx = bills.findIndex(b => b.statement_date >= PHEV_DATE);
+  const billAnnotation = phevBillIdx >= 0 ? {
+    type: 'line', xMin: phevBillIdx - 0.5, xMax: phevBillIdx - 0.5,
+    borderColor: '#f59e0b88', borderWidth: 2, borderDash: [4, 3],
+    label: { content: 'PHEV', display: true, position: 'start', color: '#f59e0b', font: { size: 11 }, backgroundColor: 'transparent' }
+  } : null;
+
+  if (phevGasChart) phevGasChart.destroy();
+  phevGasChart = new Chart(document.getElementById('chart-phev-gas'), {
+    type: 'bar',
+    data: { labels: billLabels, datasets: [{
+      data: gasVals,
+      backgroundColor: gasVals.map((v, i) => i < phevBillIdx ? '#ea580c44' : '#ea580c88')
+    }]},
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } },
+        annotation: billAnnotation ? { annotations: { phevLine: billAnnotation } } : {}
+      },
+      scales: {
+        x: { ticks: { color: '#64748b', maxRotation: 45, font: { size: 10 } }, grid: { color: '#1e2235' } },
+        y: { ticks: { color: '#64748b', callback: v => `$${v}` }, grid: { color: '#1e2235' } }
+      }
+    }
+  });
+
+  document.getElementById('phev-note').innerHTML = `
+    <strong style="color:#e2e8f0">Important context — Sheila's commute:</strong>
+    Sheila had hip surgery in September 2025 and was off work until almost Christmas. She returned 3 days/week,
+    then a 5-day/week back-to-office mandate started in early February 2026. Mike works from home.<br><br>
+    This means <strong style="color:#e2e8f0">Oct–Dec 2025 data is confounded</strong> — the near-zero gas usage
+    was mostly Sheila not driving, not just the PHEV battery. The numbers can't be attributed to the car alone.<br><br>
+    <strong style="color:#10b981">The cleanest comparison is Feb/Mar 2026</strong> — Sheila back full-time, 5 days/week,
+    same winter conditions as the year before:<br>
+    &nbsp;&nbsp;• Feb 2025 (before PHEV, same commute): <strong>$214</strong> local fills, 146L<br>
+    &nbsp;&nbsp;• Feb 2026 (PHEV, 5d/wk from mid-month): <strong>$47</strong> local fills, 41L<br>
+    &nbsp;&nbsp;• Mar 2025 (before PHEV): <strong>$78</strong>, 53L &nbsp;|&nbsp; Mar 2026 so far: <strong>$34</strong>, 22L<br><br>
+    Even with full commuting, the PHEV is using roughly <strong style="color:#10b981">1/3 to 1/4 the gasoline</strong>.
+    The battery is covering most of the daily commute — she's mostly topping up for longer trips.<br><br>
+    <strong style="color:#e2e8f0">Summer months are noisy</strong> — July/Aug/Sep include road trips (Revelstoke, Victoria, Kamloops, Hinton)
+    which vary year to year and aren't affected by the PHEV.<br><br>
+    <strong style="color:#e2e8f0">Dec 2025 and Jan 2026</strong> have no Esso receipts in the data forwarded, so those months are
+    missing from the averages above.`;
+}
+
+function drawROI(bills, solar, roi, totalSelfSavings) {
+  if (roiChart) roiChart.destroy();
+  const sorted = [...bills].sort((a, b) => a.statement_date.localeCompare(b.statement_date));
+  const labels = [], cumSavings = [], cumLoan = [];
+  const loanStart = new Date(solar.loan_start_date);
+  const grant = solar.government_subsidy || 0;
+  // Grant counts from installation date — add it at the first bill
+  let runSavings = 0, grantAdded = false;
+  for (const b of sorted) {
+    if (!grantAdded) { runSavings += grant; grantAdded = true; }
+    runSavings += (b.export_credit || 0) + (b.self_val || 0);
+    const d = new Date(b.statement_date);
+    const mos = Math.max(0, (d.getFullYear() - loanStart.getFullYear()) * 12 + (d.getMonth() - loanStart.getMonth()));
+    labels.push(b.statement_date.slice(0, 7));
+    cumSavings.push(+runSavings.toFixed(2));
+    cumLoan.push(+(Math.min(mos, solar.loan_term_months || 120) * (solar.loan_monthly_payment || 0)).toFixed(2));
+  }
+  roiChart = new Chart(document.getElementById('chart-roi'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Electricity saved', data: cumSavings, borderColor: '#10b981', backgroundColor: '#10b98115', fill: true, tension: .3, borderWidth: 2, pointRadius: 0 },
+        { label: 'Loan paid', data: cumLoan, borderColor: '#ef4444', backgroundColor: 'transparent', fill: false, tension: .3, borderWidth: 2, pointRadius: 0 },
+      ]
+    },
+    options: chartOpts('$'),
+  });
+}
+
+function chartOpts(unit) {
+  return {
+    responsive: true, maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: '#1e2235' } },
+      y: { ticks: { color: '#64748b', font: { size: 11 }, callback: v => unit === '$' ? '$' + v : v + ' ' + unit }, grid: { color: '#1e2235' } }
+    }
+  };
+}
+
+// ── Bills ─────────────────────────────────────────────────────────────────────
+async function loadBills() {
+  const bills = await fetch('/api/bills').then(r => r.json());
+  const tbody = document.getElementById('bills-tbody');
+  if (!bills.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#64748b;text-align:center;padding:2rem">No bills yet. Import one!</td></tr>';
+    return;
+  }
+  tbody.innerHTML = bills.map(b => `
+    <tr>
+      <td>${b.statement_date}</td>
+      <td style="color:#64748b;font-size:.8rem">${b.electricity_period_start || ''}–${b.electricity_period_end || ''}</td>
+      <td class="blue">${(b.grid_import_kwh || 0).toFixed(0)}</td>
+      <td class="gold">${(b.grid_export_kwh || 0).toFixed(0)}</td>
+      <td class="orange">${(b.gas_usage_gj || 0).toFixed(2)}</td>
+      <td>$${(b.electricity_total || 0).toFixed(2)}</td>
+      <td>$${(b.gas_total || 0).toFixed(2)}</td>
+      <td style="font-weight:700">$${(b.total_amount || 0).toFixed(2)}</td>
+      <td><div class="row-btns">
+        <button class="danger" onclick="deleteBillRow(${b.id}, this)">Delete</button>
+      </div></td>
+    </tr>
+  `).join('');
+}
+
+async function deleteBillRow(id, btn) {
+  if (!confirm('Delete this bill?')) return;
+  await fetch('/api/bills/' + id, { method: 'DELETE' });
+  loadBills();
+}
+
+// ── Import modal ──────────────────────────────────────────────────────────────
+function openImport() {
+  document.getElementById('import-modal').classList.add('open');
+  document.getElementById('import-url').value = '';
+  document.getElementById('import-status').innerHTML = '';
+  document.getElementById('parsed-preview').style.display = 'none';
+  parsedBill = null;
+}
+function closeImport() {
+  document.getElementById('import-modal').classList.remove('open');
+}
+
+async function runImport() {
+  const url = document.getElementById('import-url').value.trim();
+  if (!url) return;
+  const status = document.getElementById('import-status');
+  status.innerHTML = '<span style="color:#64748b">Fetching PDF…</span>';
+  document.getElementById('parsed-preview').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    const data = await res.json();
+    if (!res.ok) { status.innerHTML = `<div class="err">Error: ${data.error}</div>`; return; }
+    parsedBill = data.parsed;
+    status.innerHTML = '';
+    showParsed(parsedBill);
+  } catch (e) {
+    status.innerHTML = `<div class="err">${e.message}</div>`;
+  }
+}
+
+function showParsed(p) {
+  const fields = [
+    ['Statement #', p.statement_number], ['Statement Date', p.statement_date],
+    ['Elec Period', `${p.electricity_period_start} → ${p.electricity_period_end}`],
+    ['Gas Period', `${p.gas_period_start} → ${p.gas_period_end}`],
+    ['Grid Import', `${p.grid_import_kwh} kWh`], ['Solar Export', `${p.grid_export_kwh} kWh`],
+    ['Elec Rate', p.electricity_rate_kwh ? `$${p.electricity_rate_kwh}/kWh` : '—'],
+    ['EMR Rate', p.electricity_emr_rate ? `$${p.electricity_emr_rate}/kWh` : '—'],
+    ['Elec Total', `$${(p.electricity_total || 0).toFixed(2)}`],
+    ['Gas Usage', `${p.gas_usage_gj} GJ`], ['Gas Total', `$${(p.gas_total || 0).toFixed(2)}`],
+    ['GST', `$${(p.gst || 0).toFixed(2)}`], ['Total Owing', `$${(p.total_amount || 0).toFixed(2)}`],
+  ];
+  document.getElementById('parsed-fields').innerHTML = fields.map(([k, v]) =>
+    `<div class="parsed-item"><div class="k">${k}</div><div class="v">${v ?? '—'}</div></div>`
+  ).join('');
+  document.getElementById('parsed-preview').style.display = 'block';
+}
+
+async function confirmSave() {
+  if (!parsedBill) return;
+  const res = await fetch('/api/bills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsedBill) });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById('import-status').innerHTML = `<div class="err">${data.error}</div>`;
+    return;
+  }
+  closeImport();
+  loadBills();
+}
+
+// ── Solar config ──────────────────────────────────────────────────────────────
+let solarCfg = null;
+
+async function loadSolar() {
+  solarCfg = await fetch('/api/solar').then(r => r.json());
+  renderSolarDisplay(solarCfg);
+}
+
+function renderSolarDisplay(cfg) {
+  const el = document.getElementById('solar-display');
+  if (!cfg || !cfg.id) {
+    el.innerHTML = '<p style="color:#64748b;font-size:.875rem">No installation data yet. Click Edit to add it.</p>';
+    return;
+  }
+  const net = (cfg.total_cost || 0) - (cfg.government_subsidy || 0);
+  const row = (label, value) => `
+    <div style="display:flex;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid #1e2235">
+      <span style="color:#64748b;font-size:.875rem">${label}</span>
+      <span style="font-weight:600;font-size:.875rem">${value}</span>
+    </div>`;
+  el.innerHTML = `
+    <div style="max-width:480px">
+      ${row('Installation date', cfg.installation_date || '—')}
+      ${row('Total cost', cfg.total_cost ? '$' + cfg.total_cost.toLocaleString() : '—')}
+      ${row('Government subsidy', cfg.government_subsidy ? '-$' + cfg.government_subsidy.toLocaleString() : '—')}
+      ${row('Net cost', '$' + net.toLocaleString())}
+      ${row('Loan amount', cfg.loan_amount ? '$' + cfg.loan_amount.toLocaleString() : '—')}
+      ${row('Monthly payment', cfg.loan_monthly_payment ? '$' + cfg.loan_monthly_payment + ' / month' : '—')}
+      ${row('Loan term', cfg.loan_term_months ? cfg.loan_term_months + ' months (' + (cfg.loan_term_months / 12).toFixed(0) + ' years)' : '—')}
+      ${row('Loan start date', cfg.loan_start_date || '—')}
+      ${cfg.notes ? row('Notes', cfg.notes) : ''}
+    </div>`;
+}
+
+function openSolarEdit() {
+  const cfg = solarCfg || {};
+  document.getElementById('s-install-date').value = cfg.installation_date || '';
+  document.getElementById('s-total-cost').value = cfg.total_cost || '';
+  document.getElementById('s-subsidy').value = cfg.government_subsidy || '';
+  document.getElementById('s-loan-amount').value = cfg.loan_amount || '';
+  document.getElementById('s-monthly-payment').value = cfg.loan_monthly_payment || '';
+  document.getElementById('s-loan-term').value = cfg.loan_term_months || 120;
+  document.getElementById('s-loan-start').value = cfg.loan_start_date || '';
+  document.getElementById('s-notes').value = cfg.notes || '';
+  document.getElementById('solar-modal').classList.add('open');
+}
+
+function closeSolarEdit() {
+  document.getElementById('solar-modal').classList.remove('open');
+}
+
+async function saveSolar() {
+  const body = {
+    installation_date: document.getElementById('s-install-date').value || null,
+    total_cost: parseFloat(document.getElementById('s-total-cost').value) || null,
+    government_subsidy: parseFloat(document.getElementById('s-subsidy').value) || null,
+    loan_amount: parseFloat(document.getElementById('s-loan-amount').value) || null,
+    loan_monthly_payment: parseFloat(document.getElementById('s-monthly-payment').value) || null,
+    loan_term_months: parseInt(document.getElementById('s-loan-term').value) || 120,
+    loan_start_date: document.getElementById('s-loan-start').value || null,
+    notes: document.getElementById('s-notes').value || null,
+  };
+  await fetch('/api/solar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  solarCfg = { ...solarCfg, ...body, id: 1 };
+  renderSolarDisplay(solarCfg);
+  closeSolarEdit();
+}
+
+// ── Rate Plans ────────────────────────────────────────────────────────────────
+async function loadRates() {
+  const plans = await fetch('/api/rate-plans').then(r => r.json());
+  const tbody = document.getElementById('rates-tbody');
+  if (!plans.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#64748b;text-align:center;padding:2rem">No rate plans saved yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = plans.map(p => `
+    <tr>
+      <td>${p.utility}</td>
+      <td style="max-width:260px">${p.plan_name}</td>
+      <td>${p.effective_from || '—'}</td>
+      <td>${p.effective_until || '—'}</td>
+      <td>${p.admin_fee_per_day ? '$' + p.admin_fee_per_day + '/day' : '—'}</td>
+      <td>${p.emr_rate ? '$' + p.emr_rate : '—'}</td>
+      <td>${p.energy_rate_type || ''}${p.energy_rate_fixed ? ' $' + p.energy_rate_fixed : ''}</td>
+      <td>${p.early_exit_fee ? '<span style="color:#ef4444">Yes</span>' : 'No'}</td>
+      <td><button class="danger" onclick="deleteRate(${p.id})">Delete</button></td>
+    </tr>
+  `).join('');
+}
+
+function openRatePlan() { document.getElementById('rate-modal').classList.add('open'); }
+function closeRatePlan() { document.getElementById('rate-modal').classList.remove('open'); }
+
+async function saveRatePlan() {
+  const body = {
+    utility: document.getElementById('rp-utility').value,
+    site_id: document.getElementById('rp-site-id').value || null,
+    plan_name: document.getElementById('rp-plan-name').value,
+    effective_from: document.getElementById('rp-from').value || null,
+    effective_until: document.getElementById('rp-until').value || null,
+    admin_fee_per_day: parseFloat(document.getElementById('rp-admin-fee').value) || null,
+    emr_rate: parseFloat(document.getElementById('rp-emr').value) || null,
+    energy_rate_type: document.getElementById('rp-rate-type').value || null,
+    energy_rate_fixed: parseFloat(document.getElementById('rp-rate-fixed').value) || null,
+    early_exit_fee: parseInt(document.getElementById('rp-exit-fee').value),
+    notes: document.getElementById('rp-notes').value || null,
+  };
+  const res = await fetch('/api/rate-plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (res.ok) { closeRatePlan(); loadRates(); }
+  else { document.getElementById('rp-msg').innerHTML = '<div class="err">Save failed</div>'; }
+}
+
+async function deleteRate(id) {
+  if (!confirm('Delete this rate plan?')) return;
+  await fetch('/api/rate-plans/' + id, { method: 'DELETE' });
+  loadRates();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>

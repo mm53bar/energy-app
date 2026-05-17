@@ -1,0 +1,16 @@
+[Unit]
+Description=Energy App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mike/energy-app
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production PORT=3007
+
+[Install]
+WantedBy=default.target
