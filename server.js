@@ -395,4 +395,36 @@ app.post("/api/solar/generation/sync", async (req, res) => {
   }
 });
 
+// Intraday 5-minute power samples for a given date (default: today).
+// Proxies the ECU's old_power_graph endpoint, simplifies the payload, and
+// caches per-date (5 min for today, 24 h for past dates since they're frozen).
+app.get("/api/solar/intraday", async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const dateStr = req.query.date || today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+  }
+  const cacheKey = `intraday:${dateStr}`;
+  const ttl = dateStr === today ? 5 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const cached = fromCache(cacheKey, ttl);
+  if (cached) return res.json(cached);
+  try {
+    const raw = await ecuPost(
+      "/index.php/realtimedata/old_power_graph",
+      `date=${dateStr}`,
+    );
+    const data = JSON.parse(raw);
+    const samples = (data.power || []).map((p) => ({
+      ts: p.time,
+      w: p.each_system_power,
+    }));
+    const peak_w = samples.reduce((m, p) => (p.w > m ? p.w : m), 0);
+    const result = { date: dateStr, peak_w, samples };
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (e) {
+    res.status(503).json({ error: "ECU unavailable: " + e.message });
+  }
+});
+
 app.listen(PORT, () => console.log(`Energy app running on port ${PORT}`));
