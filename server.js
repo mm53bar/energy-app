@@ -395,11 +395,18 @@ app.post("/api/solar/generation/sync", async (req, res) => {
   }
 });
 
-// Intraday 5-minute power samples for a given date (default: today).
+// Intraday 5-minute power samples for a given date (default: today, Edmonton-local).
 // Proxies the ECU's old_power_graph endpoint, simplifies the payload, and
 // caches per-date (5 min for today, 24 h for past dates since they're frozen).
+// IMPORTANT: defaults to Edmonton-local date, not UTC — after UTC midnight,
+// UTC's "today" is the ECU's "tomorrow" and returns no samples.
 app.get("/api/solar/intraday", async (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const dateStr = req.query.date || today;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return res.status(400).json({ error: "date must be YYYY-MM-DD" });
